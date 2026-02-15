@@ -442,28 +442,31 @@ tbody tr:hover{background:var(--bg-card-hover)}
       renderMetrics(); renderTable(); renderBurnHistory();
 
       // PHASE 2: Background live scan — updates progressively
-      updateScanStatus('Scanning for live buybacks...');
-      await liveScanProgressive();
+      updateScanStatus('Starting live scan...');
+      try {
+        await liveScanProgressive();
+      } catch (scanErr) {
+        updateScanStatus('SCAN ERROR: ' + scanErr.message);
+      }
 
-      updateScanStatus(null);
       document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
     } catch (e) {
-      console.error('Init error:', e);
+      updateScanStatus('INIT ERROR: ' + e.message);
       document.getElementById('txBody').innerHTML = '<tr><td colspan="5" class="error-state">Failed to fetch data. Please refresh.<br><small>'+e.message+'</small></td></tr>';
     }
   }
 
   function updateScanStatus(msg) {
-    var el = document.getElementById('scanProgress');
-    if (!el) {
-      var wrap = document.getElementById('lastUpdated');
-      var sp = document.createElement('span');
-      sp.id = 'scanProgress';
-      sp.style.cssText = 'font-family:var(--font-mono);font-size:10px;color:var(--accent-buyback);margin-right:12px;';
-      wrap.parentNode.insertBefore(sp, wrap);
-      el = sp;
+    var el = document.getElementById('buybackStatusText');
+    if (msg) {
+      el.textContent = msg;
+      el.style.fontFamily = 'var(--font-mono)';
+      el.style.fontSize = '13px';
+    } else {
+      el.textContent = 'S6 buybacks executing daily \u2014 40% of platform fees';
+      el.style.fontFamily = '';
+      el.style.fontSize = '';
     }
-    el.textContent = msg || '';
   }
 
   async function fetchDecBurnAmount() {
