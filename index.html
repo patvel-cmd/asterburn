@@ -204,9 +204,9 @@ tbody tr:hover{background:var(--bg-card-hover)}
     ],
     COINGECKO_ID: 'aster-2',
     COINGECKO_URL: 'https://api.coingecko.com/api/v3',
-    SCAN_BLOCKS: 57600,
+    SCAN_BLOCKS: 28800,
     PAGE_SIZE: 20,
-    RPC_DELAY: 600,
+    RPC_DELAY: 400,
   };
 
   const KNOWN_EVENTS = [
@@ -429,14 +429,115 @@ tbody tr:hover{background:var(--bg-card-hover)}
 
   async function init() {
     try {
-      await fetchPrice(); renderPrice();
-      var events = await fetchTransferEvents();
-      state.events = events; state.filteredEvents = events;
+      // PHASE 1: Instant render — price + historical burns (< 2 seconds)
+      var pricePromise = fetchPrice();
+      var decBurnPromise = fetchDecBurnAmount();
+      await pricePromise;
+      renderPrice();
+
+      // Show historical events immediately
+      await decBurnPromise;
+      state.events = [...KNOWN_EVENTS];
+      state.filteredEvents = state.events;
       renderMetrics(); renderTable(); renderBurnHistory();
+
+      // PHASE 2: Background live scan — updates progressively
+      updateScanStatus('Scanning for live buybacks...');
+      await liveScanProgressive();
+
+      updateScanStatus(null);
       document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
     } catch (e) {
       console.error('Init error:', e);
       document.getElementById('txBody').innerHTML = '<tr><td colspan="5" class="error-state">Failed to fetch data. Please refresh.<br><small>'+e.message+'</small></td></tr>';
+    }
+  }
+
+  function updateScanStatus(msg) {
+    var el = document.getElementById('scanProgress');
+    if (!el) {
+      var wrap = document.getElementById('lastUpdated');
+      var sp = document.createElement('span');
+      sp.id = 'scanProgress';
+      sp.style.cssText = 'font-family:var(--font-mono);font-size:10px;color:var(--accent-buyback);margin-right:12px;';
+      wrap.parentNode.insertBefore(sp, wrap);
+      el = sp;
+    }
+    el.textContent = msg || '';
+  }
+
+  async function fetchDecBurnAmount() {
+    var decBurn = KNOWN_EVENTS.find(function(e){return e.needsAmountFetch});
+    if (!decBurn) return;
+    try {
+      var receipt = await rpcCall('eth_getTransactionReceipt', [decBurn.txHash]);
+      if (receipt && receipt.logs) {
+        for (var i = 0; i < receipt.logs.length; i++) {
+          var log = receipt.logs[i];
+          if (log.topics && log.topics[0] === CONFIG.TRANSFER_TOPIC) {
+            var to = '0x' + log.topics[2].slice(26).toLowerCase();
+            if (to === CONFIG.BURN_ADDRESS.toLowerCase()) {
+              decBurn.amount = Number(BigInt(log.data)) / Math.pow(10, CONFIG.DECIMALS);
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) { console.warn('Dec burn fetch error:', e.message); }
+  }
+
+  async function liveScanProgressive() {
+    try {
+      var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
+      var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
+      var allTracked = [...BUYBACK_ADDRESSES, CONFIG.BURN_ADDRESS.toLowerCase()];
+      var padded = allTracked.map(function(a){return '0x' + a.replace('0x','').padStart(64,'0')});
+      var CHUNK = 1000;
+      var seen = new Set(state.events.map(function(e){return e.txHash}));
+      var newEvents = [];
+
+      for (var start = fromBlock; start <= latestBlock; start += CHUNK) {
+        var end = Math.min(start + CHUNK - 1, latestBlock);
+        var pct = Math.round(((start - fromBlock) / (latestBlock - fromBlock)) * 100);
+        updateScanStatus('Scanning buybacks... ' + pct + '%');
+        await sleep(CONFIG.RPC_DELAY);
+
+        try {
+          var logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, padded] });
+          if (logsTo && logsTo.length) { for (var i=0;i<logsTo.length;i++) { var p = parseTransferLog(logsTo[i]); if (!seen.has(p.logId)) { seen.add(p.logId); newEvents.push(p); } } }
+        } catch (e) {}
+        try {
+          var logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, padded, null] });
+          if (logsFrom && logsFrom.length) { for (var j=0;j<logsFrom.length;j++) { var q = parseTransferLog(logsFrom[j]); if (!seen.has(q.logId)) { seen.add(q.logId); newEvents.push(q); } } }
+        } catch (e) {}
+
+        // Progressive update: if we found new events, fetch timestamps and render
+        if (newEvents.length > 0 && pct % 20 === 0) {
+          await resolveTimestamps(newEvents);
+          for (var k=0;k<newEvents.length;k++) { if (!newEvents[k].type||newEvents[k].type==='Unclassified') newEvents[k].type = classifyEvent(newEvents[k]); }
+          state.events = [...KNOWN_EVENTS, ...newEvents];
+          state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
+          state.filteredEvents = state.currentFilter === 'all' ? state.events : state.events.filter(function(e){return e.type===state.currentFilter});
+          renderMetrics(); renderTable();
+        }
+      }
+
+      // Final resolve
+      await resolveTimestamps(newEvents);
+      for (var m=0;m<newEvents.length;m++) { if (!newEvents[m].type||newEvents[m].type==='Unclassified') newEvents[m].type = classifyEvent(newEvents[m]); }
+      state.events = [...KNOWN_EVENTS, ...newEvents];
+      state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
+      state.filteredEvents = state.currentFilter === 'all' ? state.events : state.events.filter(function(e){return e.type===state.currentFilter});
+      renderMetrics(); renderTable();
+      console.log('Scan complete: ' + state.events.length + ' events (' + state.events.filter(function(e){return e.type==='Buyback'}).length + ' buybacks)');
+    } catch (e) { console.warn('Live scan error:', e.message); }
+  }
+
+  async function resolveTimestamps(events) {
+    for (var i=0;i<events.length;i++) {
+      if (!events[i].date && events[i].blockHex) {
+        try { var block = await rpcCall('eth_getBlockByNumber', [events[i].blockHex, false]); if (block && block.timestamp) { events[i].timestamp = parseInt(block.timestamp,16); events[i].date = new Date(events[i].timestamp*1000); } await sleep(150); } catch(e) {}
+      }
     }
   }
 
