@@ -193,7 +193,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
   'use strict';
 
   const CONFIG = {
-    ASTER_CONTRACT: '0x000Ae314E2A2172a039B26378814C252734f556A',
+    ASTER_CONTRACT: '0x000ae314e2a2172a039b26378814c252734f556a',
     BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
     DECIMALS: 18,
     TRANSFER_TOPIC: '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
@@ -204,7 +204,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
     ],
     COINGECKO_ID: 'aster-2',
     COINGECKO_URL: 'https://api.coingecko.com/api/v3',
-    SCAN_BLOCKS: 28800,
+    SCAN_BLOCKS: 57600,
     PAGE_SIZE: 20,
     RPC_DELAY: 400,
   };
@@ -493,32 +493,41 @@ tbody tr:hover{background:var(--bg-card-hover)}
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
-      var allTracked = [...BUYBACK_ADDRESSES, CONFIG.BURN_ADDRESS.toLowerCase()];
-      var padded = allTracked.map(function(a){return '0x' + a.replace('0x','').padStart(64,'0')});
       var CHUNK = 1000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
-      var chunksDone = 0, chunksTotal = Math.ceil(CONFIG.SCAN_BLOCKS / CHUNK), errors = 0;
+      var errors = 0;
 
-      updateScanStatus('Scanning blocks ' + fromBlock + ' to ' + latestBlock + '...');
+      var walletsToScan = [
+        '0x664827c71193018d7843f0d0f41a5d0d6dcebe0f',
+        '0xe5779aeef4ccc5ec4fd78f008063d7dc4d0a780c',
+      ];
+      var chunksPerWallet = Math.ceil(CONFIG.SCAN_BLOCKS / CHUNK);
+      var totalChunks = chunksPerWallet * walletsToScan.length;
+      var chunksDone = 0;
 
-      for (var start = fromBlock; start <= latestBlock; start += CHUNK) {
-        var end = Math.min(start + CHUNK - 1, latestBlock);
-        var pct = Math.round(((start - fromBlock) / (latestBlock - fromBlock)) * 100);
-        chunksDone++;
-        updateScanStatus('Scanning... ' + pct + '% | ' + newEvents.length + ' found | ' + errors + ' errors');
-        await sleep(CONFIG.RPC_DELAY);
+      for (var w = 0; w < walletsToScan.length; w++) {
+        var paddedW = '0x' + walletsToScan[w].replace('0x','').padStart(64, '0');
+        var label = w === 0 ? 'Daily' : 'Strategic';
 
-        try {
-          var logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, padded] });
-          if (logsTo && logsTo.length) { for (var i=0;i<logsTo.length;i++) { var p = parseTransferLog(logsTo[i]); if (!seen.has(p.logId)) { seen.add(p.logId); newEvents.push(p); } } }
-        } catch (e) { errors++; }
-        try {
-          var logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, padded, null] });
-          if (logsFrom && logsFrom.length) { for (var j=0;j<logsFrom.length;j++) { var q = parseTransferLog(logsFrom[j]); if (!seen.has(q.logId)) { seen.add(q.logId); newEvents.push(q); } } }
-        } catch (e) { errors++; }
+        for (var start = fromBlock; start <= latestBlock; start += CHUNK) {
+          var end = Math.min(start + CHUNK - 1, latestBlock);
+          chunksDone++;
+          var pct = Math.round((chunksDone / totalChunks) * 100);
+          updateScanStatus('Scanning ' + label + '... ' + pct + '% | ' + newEvents.length + ' found | ' + errors + ' err');
+          await sleep(CONFIG.RPC_DELAY);
 
-        if (newEvents.length > 0 && pct % 20 === 0) {
+          try {
+            var logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, paddedW] });
+            if (logsTo && logsTo.length) { for (var i=0;i<logsTo.length;i++) { var p = parseTransferLog(logsTo[i]); if (!seen.has(p.logId)) { seen.add(p.logId); newEvents.push(p); } } }
+          } catch (e) { errors++; }
+          try {
+            var logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, paddedW, null] });
+            if (logsFrom && logsFrom.length) { for (var j=0;j<logsFrom.length;j++) { var q = parseTransferLog(logsFrom[j]); if (!seen.has(q.logId)) { seen.add(q.logId); newEvents.push(q); } } }
+          } catch (e) { errors++; }
+        }
+
+        if (newEvents.length > 0) {
           await resolveTimestamps(newEvents);
           for (var k=0;k<newEvents.length;k++) { if (!newEvents[k].type||newEvents[k].type==='Unclassified') newEvents[k].type = classifyEvent(newEvents[k]); }
           state.events = [...KNOWN_EVENTS, ...newEvents];
@@ -528,13 +537,12 @@ tbody tr:hover{background:var(--bg-card-hover)}
         }
       }
 
-      await resolveTimestamps(newEvents);
-      for (var m=0;m<newEvents.length;m++) { if (!newEvents[m].type||newEvents[m].type==='Unclassified') newEvents[m].type = classifyEvent(newEvents[m]); }
       state.events = [...KNOWN_EVENTS, ...newEvents];
       state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
       state.filteredEvents = state.currentFilter === 'all' ? state.events : state.events.filter(function(e){return e.type===state.currentFilter});
       renderMetrics(); renderTable();
-      updateScanStatus('Done: ' + newEvents.length + ' live events | ' + newEvents.filter(function(e){return e.type==='Buyback'}).length + ' buybacks | ' + errors + ' RPC errors');
+      var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
+      updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' errors');
     } catch (e) { updateScanStatus('Scan failed: ' + e.message); }
   }
 
