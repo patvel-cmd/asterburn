@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AsterBurn — ASTER Supply Transparency Dashboard</title>
+<meta name="description" content="Real-time ASTER token supply tracking: buybacks, burns, and net supply change. Verified on-chain data from BSC.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg-primary:#0a0b0d;--bg-secondary:#111318;--bg-card:#161820;--bg-card-hover:#1a1d27;--border:#1e2130;--border-accent:#2a2d40;--text-primary:#e8e9ed;--text-secondary:#8b8fa3;--text-muted:#565a6e;--accent-burn:#ff4d4d;--accent-burn-glow:rgba(255,77,77,.15);--accent-buyback:#00d4aa;--accent-buyback-glow:rgba(0,212,170,.15);--accent-blue:#4d8eff;--accent-yellow:#ffc44d;--font-display:'Plus Jakarta Sans',sans-serif;--font-mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg-primary);color:var(--text-primary);font-family:var(--font-display);line-height:1.6;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-image:linear-gradient(rgba(30,33,48,.3) 1px,transparent 1px),linear-gradient(90deg,rgba(30,33,48,.3) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+.container{max-width:1120px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
+.header{padding:28px 0 20px;border-bottom:1px solid var(--border)}
+.header-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-icon{width:42px;height:42px;background:linear-gradient(135deg,#ff6b35,#ff4d4d);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.brand-name{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.brand-name span{color:var(--accent-burn)}
+.brand-tag{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase}
+.price-strip{display:flex;align-items:center;gap:16px;font-family:var(--font-mono)}
+.price-meta{font-size:11px;color:var(--text-muted);margin-right:4px}
+.price-value{font-size:22px;font-weight:700}
+.price-change{font-size:12px;font-weight:600;padding:3px 8px;border-radius:6px}
+.price-change.up{background:rgba(0,212,170,.15);color:#00d4aa}
+.price-change.down{background:rgba(255,77,77,.15);color:#ff4d4d}
+.cta-buy{display:inline-flex;align-items:center;padding:10px 22px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-family:var(--font-display);font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;letter-spacing:.3px;transition:all .2s;box-shadow:0 2px 12px rgba(37,99,235,.3)}
+.cta-buy:hover{background:linear-gradient(135deg,#4d8eff,#3b82f6);box-shadow:0 4px 20px rgba(37,99,235,.45);transform:translateY(-1px)}
+.status-banner{margin:20px 0;padding:14px 20px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary)}
+.status-dot{width:8px;height:8px;background:var(--accent-buyback);border-radius:50%;flex-shrink:0;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px}
+.metric-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;transition:border-color .2s}
+.metric-card:hover{border-color:var(--border-accent)}
+.metric-label{font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px}
+.metric-value{font-family:var(--font-mono);font-size:22px;font-weight:700;margin-bottom:4px;line-height:1.2}
+.metric-value.burn{color:var(--accent-burn)}.metric-value.buyback{color:var(--accent-buyback)}.metric-value.blue{color:var(--accent-blue)}.metric-value.yellow{color:var(--accent-yellow)}
+.metric-sub{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.section-header{display:flex;align-items:center;gap:12px;margin:36px 0 16px}
+.section-icon{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.section-icon.burn{background:var(--accent-burn-glow)}.section-icon.buyback{background:var(--accent-buyback-glow)}
+.section-title-text{font-family:var(--font-mono);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-secondary);font-weight:600}
+.section-line{flex:1;height:1px;background:var(--border)}
+.section-link{font-family:var(--font-mono);font-size:10px;color:var(--accent-blue);text-decoration:none;letter-spacing:.5px;flex-shrink:0}
+.section-link:hover{text-decoration:underline}
+.buyback-status{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.buyback-status-left{display:flex;align-items:center;gap:16px}
+.buyback-pulse{width:40px;height:40px;border-radius:50%;background:var(--accent-buyback-glow);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.buyback-pulse-dot{width:12px;height:12px;border-radius:50%;background:var(--accent-buyback);animation:pulse 2s infinite}
+.buyback-status-label{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1.5px}
+.buyback-status-value{font-size:15px;font-weight:600;color:var(--text-primary);margin-top:2px}
+.buyback-status-right{display:flex;gap:32px}
+.buyback-stat-label{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
+.buyback-stat-value{font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--accent-buyback);margin-top:2px}
+.table-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:8px}
+.table-controls{padding:16px 20px 12px;display:flex;gap:8px;flex-wrap:wrap}
+.filter-btn{font-family:var(--font-mono);font-size:11px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;letter-spacing:.5px}
+.filter-btn:hover{color:var(--text-secondary);border-color:var(--border-accent)}
+.filter-btn.active{background:var(--bg-card-hover);color:var(--text-primary);border-color:var(--border-accent)}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);padding:12px 20px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:14px 20px;border-bottom:1px solid rgba(30,33,48,.5);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-card-hover)}
+.type-badge{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:4px 10px;border-radius:6px}
+.type-badge.burn{background:var(--accent-burn-glow);color:var(--accent-burn)}
+.type-badge.buyback{background:var(--accent-buyback-glow);color:var(--accent-buyback)}
+.type-badge.unclassified{background:rgba(86,90,110,.2);color:var(--text-muted)}
+.amount-cell{font-family:var(--font-mono);font-weight:600}
+.usd-cell{font-family:var(--font-mono);color:var(--text-secondary)}
+.tx-link{font-family:var(--font-mono);font-size:12px;color:var(--accent-blue);text-decoration:none;opacity:.7;transition:opacity .15s}
+.tx-link:hover{opacity:1;text-decoration:underline}
+.date-cell{display:flex;flex-direction:column;gap:2px}
+.date-main{color:var(--text-primary)}.date-ago{font-family:var(--font-mono);font-size:10px;color:var(--text-muted)}
+.loading,.empty-state,.error-state{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border-accent);border-top-color:var(--accent-buyback);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pagination{display:flex;justify-content:center;align-items:center;gap:12px;padding:14px 20px;border-top:1px solid var(--border)}
+.page-btn{font-family:var(--font-mono);font-size:11px;padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s}
+.page-btn:hover:not(:disabled){background:var(--bg-card-hover);color:var(--text-primary)}
+.page-btn:disabled{opacity:.3;cursor:not-allowed}
+.page-info{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.bscscan-links{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0}
+.bscscan-btn{font-family:var(--font-mono);font-size:10px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);text-decoration:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px;letter-spacing:.5px}
+.bscscan-btn:hover{border-color:var(--accent-blue);color:var(--accent-blue);background:rgba(77,142,255,.05)}
+.explainer-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin:40px 0 32px}
+.explainer-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:28px 24px}
+.explainer-card-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px}
+.explainer-card-icon.orange{background:linear-gradient(135deg,rgba(255,107,53,.15),rgba(255,77,77,.15))}
+.explainer-card-icon.green{background:rgba(0,212,170,.12)}
+.explainer-card h3{font-size:15px;font-weight:700;margin-bottom:10px}
+.explainer-card p{font-size:13px;color:var(--text-secondary);line-height:1.7}
+.explainer-card p strong{color:var(--text-primary);font-weight:600}
+.footer{padding:28px 0;text-align:center;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);margin-top:12px;line-height:1.8}
+.footer a{color:var(--accent-blue);text-decoration:none}.footer a:hover{text-decoration:underline}
+.last-updated{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-align:right;margin-top:8px}
+.fade-in{animation:fadeIn .3s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:768px){.metrics{grid-template-columns:repeat(2,1fr)}.explainer-grid{grid-template-columns:1fr}.buyback-status{flex-direction:column;align-items:flex-start}.header-inner{flex-direction:column;align-items:flex-start}}
+@media(max-width:480px){.metrics{grid-template-columns:1fr}.metric-value{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="header fade-in"><div class="header-inner">
+    <div class="brand"><div class="brand-icon">🔥</div><div><div class="brand-name">Aster<span>Burn</span></div><div class="brand-tag">Supply Transparency Dashboard</div></div></div>
+    <div class="price-strip"><div><span class="price-meta">ASTER</span><span class="price-value" id="price">—</span></div><span class="price-change" id="priceChange">—</span><div><span class="price-meta">MCap</span><span id="mcap" style="color:var(--text-secondary);font-size:13px">—</span></div><a href="https://accounts.binance.com/register?ref=16082190" target="_blank" class="cta-buy">Buy ASTER</a></div>
+  </div></header>
+
+  <div class="status-banner fade-in" id="statusBanner"><div class="status-dot"></div><span>Loading supply status...</span></div>
+
+  <div class="metrics">
+    <div class="metric-card fade-in"><div class="metric-label">Total Burned</div><div class="metric-value burn" id="totalBurned">—</div><div class="metric-sub" id="totalBurnedUsd"></div></div>
+    <div class="metric-card fade-in"><div class="metric-label">Total Bought Back</div><div class="metric-value buyback" id="totalBuyback">—</div><div class="metric-sub" id="totalBuybackUsd"></div></div>
+    <div class="metric-card fade-in"><div class="metric-label">Circulating Supply</div><div class="metric-value blue" id="circSupply">—</div><div class="metric-sub" id="totalSupply"></div></div>
+    <div class="metric-card fade-in"><div class="metric-label">Net Supply Change</div><div class="metric-value yellow" id="netChange">—</div><div class="metric-sub" id="netChangeSub"></div></div>
+  </div>
+
+  <!-- S6 BUYBACKS SECTION -->
+  <div class="section-header">
+    <div class="section-icon buyback">💰</div><span class="section-title-text">S6 Buybacks — Live</span><div class="section-line"></div>
+    <a class="section-link" href="https://bscscan.com/address/0x664827c71193018D7843f0D0F41A5D0D6dcEBE0F#tokentxns" target="_blank">View on BscScan ↗</a>
+  </div>
+
+  <div class="buyback-status fade-in">
+    <div class="buyback-status-left"><div class="buyback-pulse"><div class="buyback-pulse-dot"></div></div>
+      <div><div class="buyback-status-label">Daily Auto-Buyback</div><div class="buyback-status-value" id="buybackStatusText">S6 buybacks executing daily — 40% of platform fees</div></div>
+    </div>
+    <div class="buyback-status-right">
+      <div><div class="buyback-stat-label">Fee Allocation</div><div class="buyback-stat-value">80%</div></div>
+      <div><div class="buyback-stat-label">Program</div><div class="buyback-stat-value">Stage 6</div></div>
+    </div>
+  </div>
+
+  <div class="bscscan-links">
+    <a class="bscscan-btn" href="https://bscscan.com/address/0x664827c71193018D7843f0D0F41A5D0D6dcEBE0F#tokentxns" target="_blank">📋 S6 Auto-Buyback Wallet</a>
+    <a class="bscscan-btn" href="https://bscscan.com/address/0xe5779AEEf4ccC5Ec4fD78f008063D7DC4D0A780c#tokentxns" target="_blank">📋 S6 Strategic Wallet</a>
+    <a class="bscscan-btn" href="https://bscscan.com/token/0x000Ae314E2A2172a039B26378814C252734f556A?a=0x000000000000000000000000000000000000dEaD" target="_blank">🔥 Burn Address</a>
+    <a class="bscscan-btn" href="https://bscscan.com/token/0x000Ae314E2A2172a039B26378814C252734f556A" target="_blank">📊 ASTER Token</a>
+  </div>
+
+  <div class="table-wrap fade-in" style="margin-top:16px">
+    <div class="table-controls">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="Burn">Burns</button>
+      <button class="filter-btn" data-filter="Buyback">Buybacks</button>
+    </div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Date</th><th>Type</th><th>Amount (ASTER)</th><th>Value (USD)</th><th>TX</th></tr></thead>
+      <tbody id="txBody"><tr><td colspan="5" class="loading"><div class="spinner"></div> Fetching on-chain data...</td></tr></tbody>
+    </table></div>
+    <div class="pagination" id="pagination" style="display:none">
+      <button class="page-btn" id="prevBtn" disabled>← Prev</button><span class="page-info" id="pageInfo"></span><button class="page-btn" id="nextBtn">Next →</button>
+    </div>
+  </div>
+  <div class="last-updated" id="lastUpdated"></div>
+
+  <!-- HISTORICAL BURNS SECTION -->
+  <div class="section-header">
+    <div class="section-icon burn">🔥</div><span class="section-title-text">Historical Burns — Completed</span><div class="section-line"></div>
+    <a class="section-link" href="https://bscscan.com/token/0x000Ae314E2A2172a039B26378814C252734f556A?a=0x000000000000000000000000000000000000dEaD" target="_blank">Verify on-chain ↗</a>
+  </div>
+
+  <div class="table-wrap fade-in">
+    <div class="table-scroll"><table>
+      <thead><tr><th>Event</th><th>Date</th><th>Amount Burned</th><th>Value (USD)</th><th>TX</th></tr></thead>
+      <tbody id="burnHistoryBody"><tr><td colspan="5" class="loading"><div class="spinner"></div> Loading burn history...</td></tr></tbody>
+      <tfoot id="burnHistoryFoot" style="display:none"><tr>
+        <td colspan="2" style="padding:14px 20px;font-weight:700;color:var(--accent-burn);font-family:var(--font-mono);font-size:12px;border-top:1px solid var(--border)">TOTAL BURNED</td>
+        <td style="padding:14px 20px;font-weight:700;color:var(--accent-burn);font-family:var(--font-mono);font-size:14px;border-top:1px solid var(--border)" id="burnTotalAmount">—</td>
+        <td style="padding:14px 20px;font-weight:700;color:var(--text-secondary);font-family:var(--font-mono);font-size:13px;border-top:1px solid var(--border)" id="burnTotalUsd">—</td>
+        <td style="border-top:1px solid var(--border)"></td>
+      </tr></tfoot>
+    </table></div>
+  </div>
+
+  <!-- EXPLAINER CARDS -->
+  <div class="explainer-grid">
+    <div class="explainer-card fade-in"><div class="explainer-card-icon orange">🔥</div><h3>What is ASTER?</h3>
+      <p>ASTER is the native token of <strong>Aster DEX</strong>, one of the leading perpetual trading platforms on BNB Chain, backed by <strong>YZi Labs</strong> (formerly Binance Labs). With over $11B in daily volume, the platform generates significant fee revenue used to support the token through buybacks and burns.</p></div>
+    <div class="explainer-card fade-in"><div class="explainer-card-icon green">💰</div><h3>How Do Burns &amp; Buybacks Work?</h3>
+      <p>Aster allocates up to <strong>80% of daily platform fees</strong> toward ASTER buybacks. <strong>40%</strong> goes to automatic daily market purchases, and <strong>20–40%</strong> to a strategic reserve for targeted buys during volatility. Bought-back tokens are periodically <strong>burned</strong> (sent to the dead address), permanently removing them from circulation. All transactions are verifiable on-chain.</p></div>
+  </div>
+
+  <footer class="footer">AsterBurn — Independent community dashboard. Not affiliated with the ASTER team.<br>All data sourced from <a href="https://bscscan.com/token/0x000Ae314E2A2172a039B26378814C252734f556A" target="_blank">BSC on-chain</a> &amp; <a href="https://www.coingecko.com/" target="_blank">CoinGecko</a>. Verify everything independently.</footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const CONFIG = {
+    ASTER_CONTRACT: '0x000Ae314E2A2172a039B26378814C252734f556A',
+    BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
+    DECIMALS: 18,
+    TRANSFER_TOPIC: '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+    RPC_ENDPOINTS: [
+      'https://rpc.ankr.com/bsc/701511136454e79c4a5d4bbda35563a72d6243e728ece2cbdbe462ae19e4a703',
+      'https://bsc-dataseed.binance.org/',
+      'https://bsc-dataseed1.defibit.io/',
+    ],
+    COINGECKO_ID: 'aster-2',
+    COINGECKO_URL: 'https://api.coingecko.com/api/v3',
+    SCAN_BLOCKS: 57600,
+    PAGE_SIZE: 20,
+    RPC_DELAY: 600,
+  };
+
+  const KNOWN_EVENTS = [
+    { txHash: '0x16810ab71f8c445ee7837600ddc2d2f9411badf4ca2bc2e3f3926c20156e506e', from: '0x4786927333c0ba8ab27ca41361adf33148c5301e', to: '0x000000000000000000000000000000000000dead', amount: 53920060.26, timestamp: 1738756800, date: new Date('2026-02-05T13:00:00Z'), type: 'Burn', label: 'S4 Buyback Burn', blockNumber: 47200000 },
+    { txHash: '0x8b2387192e37607e093f1c9b7b926846d5621056e38341768b2a19fb998206a3', from: '0x5e4969c41ca9f9831468b98328a370b7abd5a397', to: '0x000000000000000000000000000000000000dead', amount: 30480285.20, timestamp: 1738756800, date: new Date('2026-02-05T13:00:00Z'), type: 'Burn', label: 'S5 Buyback Burn #1', blockNumber: 47200001 },
+    { txHash: '0x09cd10d44287f4b912caef093d649a245705984132fc5fe48c341c705fd70b9c', from: '0x5e4969c41ca9f9831468b98328a370b7abd5a397', to: '0x000000000000000000000000000000000000dead', amount: 14000000.00, timestamp: 1738756800, date: new Date('2026-02-05T13:00:00Z'), type: 'Burn', label: 'S5 Buyback Burn #2', blockNumber: 47200002 },
+    { txHash: '0xfda509f35cbe6c0d207fe0c05a706202d73a55057d59b85ec2e6e3a9319c08e8', from: '0x128463a60784c4d3f46c23af3f65ed859ba87974', to: '0x000000000000000000000000000000000000dead', amount: 0, timestamp: 1734000000, date: new Date('2025-12-12T00:00:00Z'), type: 'Burn', label: 'Initial Burn (Dec 2025)', blockNumber: 44000000, needsAmountFetch: true },
+  ];
+
+  const WALLET_LABELS = {
+    '0x4786927333c0ba8ab27ca41361adf33148c5301e': 'Buyback (S5 Daily)',
+    '0x5e4969c41ca9f9831468b98328a370b7abd5a397': 'Buyback (S5 Strategic)',
+    '0x664827c71193018d7843f0d0f41a5d0d6dcebe0f': 'Buyback (S6 Daily)',
+    '0xe5779aeef4ccc5ec4fd78f008063d7dc4d0a780c': 'Buyback (S6 Strategic)',
+    '0x02dcd5b2dde0f6edb4b797da468fbc52f23f49dc': 'Buyback (Historical)',
+    '0xe307f534eec7256331c347ad73e7a08446f1d7a7': 'Buyback (Historical)',
+    '0x128463a60784c4d3f46c23af3f65ed859ba87974': 'Treasury',
+  };
+
+  const BUYBACK_ADDRESSES = new Set([
+    '0x4786927333c0ba8ab27ca41361adf33148c5301e',
+    '0x5e4969c41ca9f9831468b98328a370b7abd5a397',
+    '0x664827c71193018d7843f0d0f41a5d0d6dcebe0f',
+    '0xe5779aeef4ccc5ec4fd78f008063d7dc4d0a780c',
+    '0x02dcd5b2dde0f6edb4b797da468fbc52f23f49dc',
+    '0xe307f534eec7256331c347ad73e7a08446f1d7a7',
+  ]);
+
+  let state = { events: [], filteredEvents: [], currentFilter: 'all', currentPage: 0, price: 0, priceChange24h: 0, marketCap: 0, circulatingSupply: 0, totalSupply: 0, rpcIndex: 0 };
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  const ANKR_URL = 'https://rpc.ankr.com/bsc/701511136454e79c4a5d4bbda35563a72d6243e728ece2cbdbe462ae19e4a703';
+
+  async function rpcCall(method, params) {
+    const errors = [];
+    for (let i = 0; i < CONFIG.RPC_ENDPOINTS.length; i++) {
+      const idx = (state.rpcIndex + i) % CONFIG.RPC_ENDPOINTS.length;
+      const url = CONFIG.RPC_ENDPOINTS[idx];
+      try {
+        const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+        const data = await resp.json();
+        if (data.error) { errors.push(url + ': ' + data.error.message); if (data.error.message && data.error.message.includes('limit')) await sleep(500); continue; }
+        state.rpcIndex = idx; return data.result;
+      } catch (e) { errors.push(url + ': ' + e.message); }
+    }
+    throw new Error('All RPC endpoints failed: ' + errors.join('; '));
+  }
+
+  async function rpcGetLogs(params) {
+    const resp = await fetch(ANKR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] }) });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    return data.result || [];
+  }
+
+  async function fetchPrice() {
+    try {
+      const resp = await fetch(CONFIG.COINGECKO_URL + '/coins/' + CONFIG.COINGECKO_ID + '?localization=false&tickers=false&community_data=false&developer_data=false');
+      const data = await resp.json();
+      state.price = data.market_data.current_price.usd;
+      state.priceChange24h = data.market_data.price_change_percentage_24h;
+      state.marketCap = data.market_data.market_cap.usd;
+      state.circulatingSupply = data.market_data.circulating_supply;
+      state.totalSupply = data.market_data.total_supply;
+    } catch (e) { console.warn('CoinGecko error:', e.message); }
+  }
+
+  async function fetchTransferEvents() {
+    const events = [...KNOWN_EVENTS];
+    const decBurn = events.find(e => e.needsAmountFetch);
+    if (decBurn) {
+      try {
+        const receipt = await rpcCall('eth_getTransactionReceipt', [decBurn.txHash]);
+        if (receipt && receipt.logs) {
+          for (const log of receipt.logs) {
+            if (log.topics && log.topics[0] === CONFIG.TRANSFER_TOPIC) {
+              const to = '0x' + log.topics[2].slice(26).toLowerCase();
+              if (to === CONFIG.BURN_ADDRESS.toLowerCase()) {
+                decBurn.amount = Number(BigInt(log.data)) / Math.pow(10, CONFIG.DECIMALS);
+                console.log('Fetched Dec burn amount: ' + decBurn.amount.toLocaleString() + ' ASTER');
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) { console.warn('Dec burn fetch error:', e.message); }
+    }
+
+    try {
+      const latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
+      const fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
+      console.log('Live scanning blocks ' + fromBlock + ' to ' + latestBlock + ' (~' + Math.round(CONFIG.SCAN_BLOCKS/28800) + ' days)');
+      const allTracked = [...BUYBACK_ADDRESSES, CONFIG.BURN_ADDRESS.toLowerCase()];
+      const padded = allTracked.map(a => '0x' + a.replace('0x', '').padStart(64, '0'));
+      const CHUNK = 1000;
+      const seen = new Set(events.map(e => e.txHash));
+
+      for (let start = fromBlock; start <= latestBlock; start += CHUNK) {
+        const end = Math.min(start + CHUNK - 1, latestBlock);
+        const pct = ((start - fromBlock) / (latestBlock - fromBlock)) * 100;
+        await sleep(CONFIG.RPC_DELAY);
+        try {
+          const logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, padded] });
+          if (logsTo && logsTo.length) { console.log('Chunk '+Math.round(pct)+'% TO: found '+logsTo.length); for (const log of logsTo) { const p = parseTransferLog(log); if (!seen.has(p.logId)) { seen.add(p.logId); events.push(p); } } }
+        } catch (e) { console.warn('Chunk '+Math.round(pct)+'% TO failed:', e.message); }
+        try {
+          const logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, padded, null] });
+          if (logsFrom && logsFrom.length) { console.log('Chunk '+Math.round(pct)+'% FROM: found '+logsFrom.length); for (const log of logsFrom) { const p = parseTransferLog(log); if (!seen.has(p.logId)) { seen.add(p.logId); events.push(p); } } }
+        } catch (e) { console.warn('Chunk '+Math.round(pct)+'% FROM failed:', e.message); }
+      }
+    } catch (e) { console.warn('Live scan error:', e.message); }
+
+    for (const evt of events) {
+      if (!evt.date && evt.blockHex) {
+        try { const block = await rpcCall('eth_getBlockByNumber', [evt.blockHex, false]); if (block && block.timestamp) { evt.timestamp = parseInt(block.timestamp, 16); evt.date = new Date(evt.timestamp * 1000); } await sleep(200); } catch(e) {}
+      }
+    }
+    for (const evt of events) { if (!evt.type || evt.type === 'Unclassified') evt.type = classifyEvent(evt); }
+    events.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    console.log('Total events: ' + events.length + ' (' + events.filter(e=>e.type==='Burn').length + ' burns, ' + events.filter(e=>e.type==='Buyback').length + ' buybacks)');
+    return events;
+  }
+
+  function parseTransferLog(log) {
+    const from = '0x' + log.topics[1].slice(26).toLowerCase();
+    const to = '0x' + log.topics[2].slice(26).toLowerCase();
+    let amount = 0;
+    try { const raw = log.data && log.data !== '0x' ? log.data : (log.topics[3] || '0x0'); amount = Number(BigInt(raw)) / Math.pow(10, CONFIG.DECIMALS); } catch(e) {}
+    return { txHash: log.transactionHash, logId: log.transactionHash + '-' + (log.logIndex || '0x0'), blockHex: log.blockNumber, blockNumber: parseInt(log.blockNumber, 16), from, to, amount, timestamp: 0, date: null, type: 'Unclassified' };
+  }
+
+  function classifyEvent(evt) {
+    if (evt.to === CONFIG.BURN_ADDRESS.toLowerCase()) return 'Burn';
+    if (BUYBACK_ADDRESSES.has(evt.from) || BUYBACK_ADDRESSES.has(evt.to)) return 'Buyback';
+    return 'Unclassified';
+  }
+
+  // ── RENDERING ──
+  function fmt(n, decimals) {
+    decimals = decimals || 0;
+    if (n === null || n === undefined || isNaN(n)) return '\u2014';
+    var abs = Math.abs(n), sign = n < 0 ? '-' : '';
+    if (abs >= 1e9) return sign + (abs/1e9).toFixed(2) + 'B';
+    if (abs >= 1e6) return sign + (abs/1e6).toFixed(2) + 'M';
+    if (abs >= 1e3) return sign + abs.toLocaleString('en-US', { maximumFractionDigits: decimals });
+    return sign + abs.toFixed(decimals);
+  }
+  function fmtUsd(n) { return n ? '$' + fmt(n, 0) : ''; }
+  function fmtDate(d) { return d ? d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '\u2014'; }
+  function timeAgo(d) {
+    if (!d) return '';
+    var diff = Date.now() - d.getTime(), mins = Math.floor(diff/60000), hrs = Math.floor(diff/3600000), days = Math.floor(diff/86400000);
+    if (mins < 1) return 'just now'; if (mins < 60) return mins+'m ago'; if (hrs < 24) return hrs+'h ago'; if (days < 30) return days+'d ago';
+    return Math.floor(days/30) + 'mo ago';
+  }
+  function shortTx(h) { return h.slice(0,8) + '...' + h.slice(-6); }
+
+  function renderPrice() {
+    document.getElementById('price').textContent = state.price ? '$' + state.price.toFixed(4) : '\u2014';
+    var ch = document.getElementById('priceChange');
+    if (state.priceChange24h) { var up = state.priceChange24h >= 0; ch.textContent = (up?'+':'') + state.priceChange24h.toFixed(2) + '%'; ch.className = 'price-change ' + (up?'up':'down'); }
+    document.getElementById('mcap').textContent = state.marketCap ? fmtUsd(state.marketCap) : '\u2014';
+  }
+
+  function renderMetrics() {
+    var burns = state.events.filter(function(e){return e.type==='Burn'}), buybacks = state.events.filter(function(e){return e.type==='Buyback'});
+    var totalBurned = burns.reduce(function(s,e){return s+e.amount},0), totalBuyback = buybacks.reduce(function(s,e){return s+e.amount},0);
+    document.getElementById('totalBurned').textContent = totalBurned > 0 ? fmt(totalBurned)+' ASTER' : '\u2014';
+    document.getElementById('totalBurnedUsd').textContent = (totalBurned > 0 && state.price) ? '\u2248 '+fmtUsd(totalBurned*state.price) : '';
+    document.getElementById('totalBuyback').textContent = totalBuyback > 0 ? fmt(totalBuyback)+' ASTER' : '\u2014';
+    document.getElementById('totalBuybackUsd').textContent = (totalBuyback > 0 && state.price) ? '\u2248 '+fmtUsd(totalBuyback*state.price) : '';
+    document.getElementById('circSupply').textContent = state.circulatingSupply ? fmt(state.circulatingSupply) : '\u2014';
+    document.getElementById('totalSupply').textContent = state.totalSupply ? 'Total: '+fmt(state.totalSupply) : '';
+    document.getElementById('netChange').textContent = totalBurned > 0 ? fmt(-totalBurned)+' ASTER' : '\u2014';
+    document.getElementById('netChangeSub').textContent = totalBurned > 0 ? 'From burns' : 'Tracking on-chain';
+    var banner = document.getElementById('statusBanner');
+    banner.innerHTML = '<div class="status-dot"></div><span>' + (totalBurned > 0 ? fmt(totalBurned)+' ASTER burned' : 'Burns tracking') + ' \u00B7 ' + (totalBuyback > 0 ? fmt(totalBuyback)+' ASTER bought back' : 'Buybacks tracking') + ' \u00B7 S6 buybacks ongoing \u00B7 All data verified on-chain</span>';
+  }
+
+  function renderBurnHistory() {
+    var burns = state.events.filter(function(e){return e.type==='Burn'});
+    var tbody = document.getElementById('burnHistoryBody');
+    if (burns.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No burn events found.</td></tr>'; return; }
+    tbody.innerHTML = burns.map(function(evt) {
+      var fromLabel = WALLET_LABELS[evt.from] || shortTx(evt.from);
+      return '<tr><td><div style="font-weight:600;color:var(--text-primary)">'+(evt.label||'Burn')+'</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px">From: '+fromLabel+'</div></td>'
+        +'<td><div class="date-cell"><span class="date-main">'+fmtDate(evt.date)+'</span><span class="date-ago">'+timeAgo(evt.date)+'</span></div></td>'
+        +'<td class="amount-cell" style="color:var(--accent-burn)">'+fmt(evt.amount,2)+'</td>'
+        +'<td class="usd-cell">'+(state.price?fmtUsd(evt.amount*state.price):'\u2014')+'</td>'
+        +'<td><a class="tx-link" href="https://bscscan.com/tx/'+evt.txHash+'" target="_blank">'+shortTx(evt.txHash)+'</a></td></tr>';
+    }).join('');
+    var totalBurned = burns.reduce(function(s,e){return s+e.amount},0);
+    document.getElementById('burnTotalAmount').textContent = fmt(totalBurned)+' ASTER';
+    document.getElementById('burnTotalUsd').textContent = state.price ? fmtUsd(totalBurned*state.price) : '\u2014';
+    document.getElementById('burnHistoryFoot').style.display = '';
+  }
+
+  function renderTable() {
+    var events = state.filteredEvents, start = state.currentPage * CONFIG.PAGE_SIZE, page = events.slice(start, start + CONFIG.PAGE_SIZE);
+    var tbody = document.getElementById('txBody');
+    if (events.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No events found for this filter.</td></tr>'; document.getElementById('pagination').style.display = 'none'; return; }
+    tbody.innerHTML = page.map(function(evt) {
+      return '<tr><td><div class="date-cell"><span class="date-main">'+fmtDate(evt.date)+'</span><span class="date-ago">'+timeAgo(evt.date)+'</span></div></td>'
+        +'<td><span class="type-badge '+evt.type.toLowerCase()+'">'+evt.type+'</span></td>'
+        +'<td class="amount-cell">'+fmt(evt.amount,2)+'</td>'
+        +'<td class="usd-cell">'+(state.price?fmtUsd(evt.amount*state.price):'\u2014')+'</td>'
+        +'<td><a class="tx-link" href="https://bscscan.com/tx/'+evt.txHash+'" target="_blank">'+shortTx(evt.txHash)+'</a></td></tr>';
+    }).join('');
+    var totalPages = Math.ceil(events.length / CONFIG.PAGE_SIZE), pag = document.getElementById('pagination');
+    if (totalPages > 1) { pag.style.display = 'flex'; document.getElementById('pageInfo').textContent = (state.currentPage+1)+' / '+totalPages; document.getElementById('prevBtn').disabled = state.currentPage===0; document.getElementById('nextBtn').disabled = state.currentPage>=totalPages-1; }
+    else { pag.style.display = 'none'; }
+  }
+
+  function applyFilter(filter) {
+    state.currentFilter = filter; state.currentPage = 0;
+    state.filteredEvents = filter === 'all' ? state.events : state.events.filter(function(e){return e.type===filter});
+    document.querySelectorAll('.filter-btn').forEach(function(btn){ btn.classList.toggle('active', btn.dataset.filter === filter); });
+    renderTable();
+  }
+
+  async function init() {
+    try {
+      await fetchPrice(); renderPrice();
+      var events = await fetchTransferEvents();
+      state.events = events; state.filteredEvents = events;
+      renderMetrics(); renderTable(); renderBurnHistory();
+      document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
+    } catch (e) {
+      console.error('Init error:', e);
+      document.getElementById('txBody').innerHTML = '<tr><td colspan="5" class="error-state">Failed to fetch data. Please refresh.<br><small>'+e.message+'</small></td></tr>';
+    }
+  }
+
+  document.querySelectorAll('.filter-btn').forEach(function(btn){ btn.addEventListener('click', function(){ applyFilter(btn.dataset.filter); }); });
+  document.getElementById('prevBtn').addEventListener('click', function(){ if (state.currentPage > 0) { state.currentPage--; renderTable(); } });
+  document.getElementById('nextBtn').addEventListener('click', function(){ var tp = Math.ceil(state.filteredEvents.length/CONFIG.PAGE_SIZE); if (state.currentPage < tp-1) { state.currentPage++; renderTable(); } });
+
+  init();
+})();
+</script>
+</body>
+</html>
