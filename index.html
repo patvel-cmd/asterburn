@@ -472,11 +472,11 @@ tbody tr:hover{background:var(--bg-card-hover)}
             }
             updateScanStatus(wallet.label + ': ' + data.result.length + ' transfers found');
           } else {
-            updateScanStatus(wallet.label + ': ' + (data.message || 'no results'));
+            updateScanStatus(wallet.label + ': ' + (data.message || 'no results') + ' | ' + JSON.stringify(data.result || data).substring(0, 120));
           }
         } catch (e) { errors++; updateScanStatus(wallet.label + ' error: ' + e.message); }
 
-        await sleep(500); // BscScan allows 5 calls/sec with API key
+        await sleep(3000); // Wait so status message is visible
       }
 
       if (newEvents.length > 0) {
