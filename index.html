@@ -204,7 +204,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
     ],
     COINGECKO_ID: 'aster-2',
     COINGECKO_URL: 'https://api.coingecko.com/api/v3',
-    SCAN_BLOCKS: 57600,
+    SCAN_BLOCKS: 201600,
     PAGE_SIZE: 20,
     RPC_DELAY: 400,
   };
@@ -438,7 +438,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
-      var CHUNK = 1000;
+      var CHUNK = 5000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
       var errors = 0;
