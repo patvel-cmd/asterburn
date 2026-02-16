@@ -206,7 +206,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
     COINGECKO_URL: 'https://api.coingecko.com/api/v3',
     SCAN_BLOCKS: 201600,
     PAGE_SIZE: 20,
-    RPC_DELAY: 400,
+    RPC_DELAY: 300,
   };
 
   const KNOWN_EVENTS = [
@@ -440,7 +440,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
       // Ensure we capture all S6 buybacks (started Feb 4, ~block 81100000)
       if (fromBlock > 81100000) fromBlock = 81100000;
-      var CHUNK = 5000;
+      var CHUNK = 1000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
       var errors = 0;
@@ -490,11 +490,8 @@ tbody tr:hover{background:var(--bg-card-hover)}
       state.filteredEvents = state.currentFilter === 'all' ? state.events : state.events.filter(function(e){return e.type===state.currentFilter});
       renderMetrics(); renderTable();
       var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
-      if (bb > 0) {
-        updateScanStatus(null);
-      } else {
-        updateScanStatus('Scan complete — ' + newEvents.length + ' events | ' + errors + ' errors | range: ' + fromBlock + '-' + latestBlock);
-      }
+      applyFilter(state.currentFilter);
+      updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' err | from ' + fromBlock);
     } catch (e) { updateScanStatus('Scan error — refresh to retry'); }
   }
 
