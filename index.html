@@ -239,6 +239,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const ANKR_URL = 'https://rpc.ankr.com/bsc/701511136454e79c4a5d4bbda35563a72d6243e728ece2cbdbe462ae19e4a703';
+  const BSCSCAN_API_KEY = '2TN4PYA1FJ2IQBRH5Q31P96GWDQ4736WK2';
 
   async function rpcCall(method, params) {
     const errors = [];
@@ -444,7 +445,8 @@ tbody tr:hover{background:var(--bg-card-hover)}
             + '&address=' + wallet.addr
             + '&contractaddress=' + CONFIG.ASTER_CONTRACT
             + '&startblock=81100000&endblock=99999999'
-            + '&sort=desc&offset=1000&page=1';
+            + '&sort=desc&offset=1000&page=1'
+            + '&apikey=' + BSCSCAN_API_KEY;
           var resp = await fetch(url);
           var data = await resp.json();
 
@@ -474,7 +476,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
           }
         } catch (e) { errors++; updateScanStatus(wallet.label + ' error: ' + e.message); }
 
-        await sleep(1500); // BscScan rate limit: 1 req/sec without key
+        await sleep(500); // BscScan allows 5 calls/sec with API key
       }
 
       if (newEvents.length > 0) {
