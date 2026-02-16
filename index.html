@@ -274,61 +274,6 @@ tbody tr:hover{background:var(--bg-card-hover)}
     } catch (e) { console.warn('CoinGecko error:', e.message); }
   }
 
-  async function fetchTransferEvents() {
-    const events = [...KNOWN_EVENTS];
-    const decBurn = events.find(e => e.needsAmountFetch);
-    if (decBurn) {
-      try {
-        const receipt = await rpcCall('eth_getTransactionReceipt', [decBurn.txHash]);
-        if (receipt && receipt.logs) {
-          for (const log of receipt.logs) {
-            if (log.topics && log.topics[0] === CONFIG.TRANSFER_TOPIC) {
-              const to = '0x' + log.topics[2].slice(26).toLowerCase();
-              if (to === CONFIG.BURN_ADDRESS.toLowerCase()) {
-                decBurn.amount = Number(BigInt(log.data)) / Math.pow(10, CONFIG.DECIMALS);
-                console.log('Fetched Dec burn amount: ' + decBurn.amount.toLocaleString() + ' ASTER');
-                break;
-              }
-            }
-          }
-        }
-      } catch (e) { console.warn('Dec burn fetch error:', e.message); }
-    }
-
-    try {
-      const latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
-      const fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
-      console.log('Live scanning blocks ' + fromBlock + ' to ' + latestBlock + ' (~' + Math.round(CONFIG.SCAN_BLOCKS/28800) + ' days)');
-      const allTracked = [...BUYBACK_ADDRESSES, CONFIG.BURN_ADDRESS.toLowerCase()];
-      const padded = allTracked.map(a => '0x' + a.replace('0x', '').padStart(64, '0'));
-      const CHUNK = 1000;
-      const seen = new Set(events.map(e => e.txHash));
-
-      for (let start = fromBlock; start <= latestBlock; start += CHUNK) {
-        const end = Math.min(start + CHUNK - 1, latestBlock);
-        const pct = ((start - fromBlock) / (latestBlock - fromBlock)) * 100;
-        await sleep(CONFIG.RPC_DELAY);
-        try {
-          const logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, padded] });
-          if (logsTo && logsTo.length) { console.log('Chunk '+Math.round(pct)+'% TO: found '+logsTo.length); for (const log of logsTo) { const p = parseTransferLog(log); if (!seen.has(p.logId)) { seen.add(p.logId); events.push(p); } } }
-        } catch (e) { console.warn('Chunk '+Math.round(pct)+'% TO failed:', e.message); }
-        try {
-          const logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, padded, null] });
-          if (logsFrom && logsFrom.length) { console.log('Chunk '+Math.round(pct)+'% FROM: found '+logsFrom.length); for (const log of logsFrom) { const p = parseTransferLog(log); if (!seen.has(p.logId)) { seen.add(p.logId); events.push(p); } } }
-        } catch (e) { console.warn('Chunk '+Math.round(pct)+'% FROM failed:', e.message); }
-      }
-    } catch (e) { console.warn('Live scan error:', e.message); }
-
-    for (const evt of events) {
-      if (!evt.date && evt.blockHex) {
-        try { const block = await rpcCall('eth_getBlockByNumber', [evt.blockHex, false]); if (block && block.timestamp) { evt.timestamp = parseInt(block.timestamp, 16); evt.date = new Date(evt.timestamp * 1000); } await sleep(200); } catch(e) {}
-      }
-    }
-    for (const evt of events) { if (!evt.type || evt.type === 'Unclassified') evt.type = classifyEvent(evt); }
-    events.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    console.log('Total events: ' + events.length + ' (' + events.filter(e=>e.type==='Burn').length + ' burns, ' + events.filter(e=>e.type==='Buyback').length + ' buybacks)');
-    return events;
-  }
 
   function parseTransferLog(log) {
     const from = '0x' + log.topics[1].slice(26).toLowerCase();
@@ -493,54 +438,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
-      // Ensure we capture known recent buybacks (block ~81284744)
-      if (fromBlock > 81280000) fromBlock = 81280000;
-
-      updateScanStatus('Range: ' + fromBlock + ' to ' + latestBlock + ' (' + (latestBlock-fromBlock) + ' blocks)');
-      await sleep(2000);
-
-      // DIAGNOSTIC: Test one known block with a buyback (81284744 = 0x4D83E28)
-      var testBlock = 81284744;
-      var testFrom = '0x' + testBlock.toString(16);
-      var testTo = '0x' + (testBlock + 1).toString(16);
-      var dailyPadded = '0x000000000000000000000000664827c71193018d7843f0d0f41a5d0d6dcebe0f';
-
-      updateScanStatus('TEST: querying known block 81284744...');
-      try {
-        var testLogs = await rpcGetLogs({ fromBlock: testFrom, toBlock: testTo, address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, dailyPadded] });
-        updateScanStatus('TEST result: ' + (testLogs ? testLogs.length : 'null') + ' logs in known block | contract: ' + CONFIG.ASTER_CONTRACT);
-        await sleep(2000);
-      } catch(e) {
-        updateScanStatus('TEST ERROR: ' + e.message);
-        await sleep(3000);
-      }
-
-      // Also test without address filter to see if ANY transfers exist
-      try {
-        var testLogs2 = await rpcGetLogs({ fromBlock: testFrom, toBlock: testTo, address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC] });
-        updateScanStatus('TEST2: ' + (testLogs2 ? testLogs2.length : 'null') + ' total ASTER transfers in block 81284744');
-        await sleep(2000);
-      } catch(e) {
-        updateScanStatus('TEST2 ERROR: ' + e.message);
-        await sleep(3000);
-      }
-
-      // DIAGNOSTIC 3: Test the exact chunk that should contain block 81284744
-      var chunkStart = 81284000;
-      var chunkEnd = 81285000;
-      updateScanStatus('TEST3: chunk ' + chunkStart + '-' + chunkEnd + ' with wallet filter...');
-      try {
-        var testLogs3 = await rpcGetLogs({ fromBlock: '0x'+chunkStart.toString(16), toBlock: '0x'+chunkEnd.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, dailyPadded] });
-        updateScanStatus('TEST3: ' + (testLogs3 ? testLogs3.length : 'null') + ' logs in chunk 81284000-81285000');
-        await sleep(3000);
-      } catch(e) {
-        updateScanStatus('TEST3 ERROR: ' + e.message);
-        await sleep(3000);
-      }
-
-      // Now do the real scan
       var CHUNK = 1000;
-      var debugFirstChunk = true;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
       var errors = 0;
@@ -549,7 +447,8 @@ tbody tr:hover{background:var(--bg-card-hover)}
         '0x664827c71193018d7843f0d0f41a5d0d6dcebe0f',
         '0xe5779aeef4ccc5ec4fd78f008063d7dc4d0a780c',
       ];
-      var chunksPerWallet = Math.ceil(CONFIG.SCAN_BLOCKS / CHUNK);
+      var actualBlocks = latestBlock - fromBlock;
+      var chunksPerWallet = Math.ceil(actualBlocks / CHUNK);
       var totalChunks = chunksPerWallet * walletsToScan.length;
       var chunksDone = 0;
 
@@ -560,8 +459,8 @@ tbody tr:hover{background:var(--bg-card-hover)}
         for (var start = fromBlock; start <= latestBlock; start += CHUNK) {
           var end = Math.min(start + CHUNK - 1, latestBlock);
           chunksDone++;
-          var pct = Math.round((chunksDone / totalChunks) * 100);
-          updateScanStatus('Scanning ' + label + '... ' + pct + '% | ' + newEvents.length + ' found | ' + errors + ' err');
+          var pct = Math.min(Math.round((chunksDone / totalChunks) * 100), 100);
+          updateScanStatus('Scanning ' + label + '... ' + pct + '% | ' + newEvents.length + ' found');
           await sleep(CONFIG.RPC_DELAY);
 
           try {
@@ -588,9 +487,8 @@ tbody tr:hover{background:var(--bg-card-hover)}
       state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
       state.filteredEvents = state.currentFilter === 'all' ? state.events : state.events.filter(function(e){return e.type===state.currentFilter});
       renderMetrics(); renderTable();
-      var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
-      updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' errors');
-    } catch (e) { updateScanStatus('Scan failed: ' + e.message); }
+      updateScanStatus(null);
+    } catch (e) { updateScanStatus('Scan error — refresh to retry'); }
   }
 
   async function resolveTimestamps(events) {
