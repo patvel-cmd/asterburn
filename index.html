@@ -493,6 +493,11 @@ tbody tr:hover{background:var(--bg-card-hover)}
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
+      // Ensure we capture known recent buybacks (block ~81284744)
+      if (fromBlock > 81280000) fromBlock = 81280000;
+
+      updateScanStatus('Range: ' + fromBlock + ' to ' + latestBlock + ' (' + (latestBlock-fromBlock) + ' blocks)');
+      await sleep(2000);
 
       // DIAGNOSTIC: Test one known block with a buyback (81284744 = 0x4D83E28)
       var testBlock = 81284744;
