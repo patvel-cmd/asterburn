@@ -429,8 +429,17 @@ tbody tr:hover{background:var(--bg-card-hover)}
   async function liveScanProgressive() {
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
-      var fromBlock = latestBlock - 86400; // 3 days of blocks
-      var CHUNK = 1000;
+      
+      // Warm-up: test a known buyback block to prime the RPC connection
+      var dailyPadded = '0x' + '664827c71193018d7843f0d0f41a5d0d6dcebe0f'.padStart(64, '0');
+      try {
+        var warmup = await rpcGetLogs({ fromBlock: '0x4d86c08', toBlock: '0x4d86c09', address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, dailyPadded] });
+        updateScanStatus('RPC ready (' + (warmup ? warmup.length : 0) + ' warmup logs)');
+      } catch(e) { updateScanStatus('Warmup failed: ' + e.message); }
+      await sleep(1000);
+
+      var fromBlock = 81280000; // S6 buybacks known from this block
+      var CHUNK = 2000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
       var errors = 0;
@@ -453,14 +462,14 @@ tbody tr:hover{background:var(--bg-card-hover)}
           chunksDone++;
           var pct = Math.min(Math.round((chunksDone / totalChunks) * 100), 100);
           updateScanStatus('Scanning ' + label + '... ' + pct + '% | ' + newEvents.length + ' found | ' + errors + ' err');
-          await sleep(800);
+          await sleep(600);
 
           try {
             var logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, paddedW] });
             if (logsTo && logsTo.length) { for (var i=0;i<logsTo.length;i++) { var p = parseTransferLog(logsTo[i]); if (!seen.has(p.logId)) { seen.add(p.logId); newEvents.push(p); } } }
           } catch (e) { errors++; }
 
-          await sleep(800);
+          await sleep(600);
 
           try {
             var logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, paddedW, null] });
