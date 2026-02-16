@@ -373,32 +373,23 @@ tbody tr:hover{background:var(--bg-card-hover)}
   }
 
   async function init() {
+    // PHASE 1: Render what we can immediately
+    try { await fetchPrice(); renderPrice(); } catch(e) { console.warn('Price fetch failed:', e.message); }
+    try { await fetchDecBurnAmount(); } catch(e) { console.warn('Dec burn fetch failed:', e.message); }
+    
+    state.events = [...KNOWN_EVENTS];
+    state.filteredEvents = state.events;
+    renderMetrics(); renderTable(); renderBurnHistory();
+
+    // PHASE 2: Fetch live buybacks via BscScan API
+    updateScanStatus('Fetching live buybacks...');
     try {
-      // PHASE 1: Instant render — price + historical burns (< 2 seconds)
-      var pricePromise = fetchPrice();
-      var decBurnPromise = fetchDecBurnAmount();
-      await pricePromise;
-      renderPrice();
-
-      // Show historical events immediately
-      await decBurnPromise;
-      state.events = [...KNOWN_EVENTS];
-      state.filteredEvents = state.events;
-      renderMetrics(); renderTable(); renderBurnHistory();
-
-      // PHASE 2: Background live scan — updates progressively
-      updateScanStatus('Starting live scan...');
-      try {
-        await liveScanProgressive();
-      } catch (scanErr) {
-        updateScanStatus('SCAN ERROR: ' + scanErr.message);
-      }
-
-      document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
-    } catch (e) {
-      updateScanStatus('INIT ERROR: ' + e.message);
-      document.getElementById('txBody').innerHTML = '<tr><td colspan="5" class="error-state">Failed to fetch data. Please refresh.<br><small>'+e.message+'</small></td></tr>';
+      await liveScanProgressive();
+    } catch (scanErr) {
+      updateScanStatus('Scan error: ' + scanErr.message);
     }
+
+    document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
   }
 
   function updateScanStatus(msg) {
@@ -496,8 +487,6 @@ tbody tr:hover{background:var(--bg-card-hover)}
       var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
       updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' errors');
     } catch (e) { updateScanStatus('Scan failed: ' + e.message); }
-  }
-    } catch (e) { updateScanStatus('Scan error — refresh to retry'); }
   }
 
   async function resolveTimestamps(events) {
