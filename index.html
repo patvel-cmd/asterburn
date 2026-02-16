@@ -525,8 +525,22 @@ tbody tr:hover{background:var(--bg-card-hover)}
         await sleep(3000);
       }
 
+      // DIAGNOSTIC 3: Test the exact chunk that should contain block 81284744
+      var chunkStart = 81284000;
+      var chunkEnd = 81285000;
+      updateScanStatus('TEST3: chunk ' + chunkStart + '-' + chunkEnd + ' with wallet filter...');
+      try {
+        var testLogs3 = await rpcGetLogs({ fromBlock: '0x'+chunkStart.toString(16), toBlock: '0x'+chunkEnd.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, dailyPadded] });
+        updateScanStatus('TEST3: ' + (testLogs3 ? testLogs3.length : 'null') + ' logs in chunk 81284000-81285000');
+        await sleep(3000);
+      } catch(e) {
+        updateScanStatus('TEST3 ERROR: ' + e.message);
+        await sleep(3000);
+      }
+
       // Now do the real scan
       var CHUNK = 1000;
+      var debugFirstChunk = true;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
       var errors = 0;
