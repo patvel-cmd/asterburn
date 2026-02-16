@@ -438,6 +438,8 @@ tbody tr:hover{background:var(--bg-card-hover)}
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
+      // Ensure we capture all S6 buybacks (started Feb 4, ~block 81100000)
+      if (fromBlock > 81100000) fromBlock = 81100000;
       var CHUNK = 5000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
@@ -487,7 +489,12 @@ tbody tr:hover{background:var(--bg-card-hover)}
       state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
       state.filteredEvents = state.currentFilter === 'all' ? state.events : state.events.filter(function(e){return e.type===state.currentFilter});
       renderMetrics(); renderTable();
-      updateScanStatus(null);
+      var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
+      if (bb > 0) {
+        updateScanStatus(null);
+      } else {
+        updateScanStatus('Scan complete — ' + newEvents.length + ' events | ' + errors + ' errors | range: ' + fromBlock + '-' + latestBlock);
+      }
     } catch (e) { updateScanStatus('Scan error — refresh to retry'); }
   }
 
