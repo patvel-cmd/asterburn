@@ -493,6 +493,34 @@ tbody tr:hover{background:var(--bg-card-hover)}
     try {
       var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
       var fromBlock = latestBlock - CONFIG.SCAN_BLOCKS;
+
+      // DIAGNOSTIC: Test one known block with a buyback (81284744 = 0x4D83E28)
+      var testBlock = 81284744;
+      var testFrom = '0x' + testBlock.toString(16);
+      var testTo = '0x' + (testBlock + 1).toString(16);
+      var dailyPadded = '0x000000000000000000000000664827c71193018d7843f0d0f41a5d0d6dcebe0f';
+
+      updateScanStatus('TEST: querying known block 81284744...');
+      try {
+        var testLogs = await rpcGetLogs({ fromBlock: testFrom, toBlock: testTo, address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, dailyPadded] });
+        updateScanStatus('TEST result: ' + (testLogs ? testLogs.length : 'null') + ' logs in known block | contract: ' + CONFIG.ASTER_CONTRACT);
+        await sleep(2000);
+      } catch(e) {
+        updateScanStatus('TEST ERROR: ' + e.message);
+        await sleep(3000);
+      }
+
+      // Also test without address filter to see if ANY transfers exist
+      try {
+        var testLogs2 = await rpcGetLogs({ fromBlock: testFrom, toBlock: testTo, address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC] });
+        updateScanStatus('TEST2: ' + (testLogs2 ? testLogs2.length : 'null') + ' total ASTER transfers in block 81284744');
+        await sleep(2000);
+      } catch(e) {
+        updateScanStatus('TEST2 ERROR: ' + e.message);
+        await sleep(3000);
+      }
+
+      // Now do the real scan
       var CHUNK = 1000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
