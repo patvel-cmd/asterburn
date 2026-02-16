@@ -428,67 +428,65 @@ tbody tr:hover{background:var(--bg-card-hover)}
 
   async function liveScanProgressive() {
     try {
-      var walletsToScan = [
-        { addr: '0x664827c71193018d7843f0d0f41a5d0d6dcebe0f', label: 'Daily' },
-        { addr: '0xe5779aeef4ccc5ec4fd78f008063d7dc4d0a780c', label: 'Strategic' },
-      ];
+      var latestBlock = parseInt(await rpcCall('eth_blockNumber', []), 16);
+      var fromBlock = latestBlock - 86400; // 3 days of blocks
+      var CHUNK = 1000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
       var errors = 0;
 
+      var walletsToScan = [
+        '0x664827c71193018d7843f0d0f41a5d0d6dcebe0f',
+        '0xe5779aeef4ccc5ec4fd78f008063d7dc4d0a780c',
+      ];
+      var actualBlocks = latestBlock - fromBlock;
+      var chunksPerWallet = Math.ceil(actualBlocks / CHUNK);
+      var totalChunks = chunksPerWallet * walletsToScan.length;
+      var chunksDone = 0;
+
       for (var w = 0; w < walletsToScan.length; w++) {
-        var wallet = walletsToScan[w];
-        updateScanStatus('Fetching ' + wallet.label + ' buybacks...');
+        var paddedW = '0x' + walletsToScan[w].replace('0x','').padStart(64, '0');
+        var label = w === 0 ? 'Daily' : 'Strategic';
 
-        try {
-          var url = 'https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx'
-            + '&address=' + wallet.addr
-            + '&contractaddress=' + CONFIG.ASTER_CONTRACT
-            + '&startblock=81100000&endblock=99999999'
-            + '&sort=desc&offset=1000&page=1'
-            + '&apikey=' + ETHERSCAN_API_KEY;
-          var resp = await fetch(url);
-          var data = await resp.json();
+        for (var start = fromBlock; start <= latestBlock; start += CHUNK) {
+          var end = Math.min(start + CHUNK - 1, latestBlock);
+          chunksDone++;
+          var pct = Math.min(Math.round((chunksDone / totalChunks) * 100), 100);
+          updateScanStatus('Scanning ' + label + '... ' + pct + '% | ' + newEvents.length + ' found | ' + errors + ' err');
+          await sleep(800);
 
-          if (data.status === '1' && data.result && data.result.length) {
-            for (var i = 0; i < data.result.length; i++) {
-              var tx = data.result[i];
-              var evt = {
-                txHash: tx.hash,
-                logId: tx.hash + '-' + i,
-                from: tx.from.toLowerCase(),
-                to: tx.to.toLowerCase(),
-                amount: Number(tx.value) / Math.pow(10, CONFIG.DECIMALS),
-                timestamp: parseInt(tx.timeStamp),
-                date: new Date(parseInt(tx.timeStamp) * 1000),
-                type: 'Unclassified',
-                blockNumber: parseInt(tx.blockNumber),
-              };
-              if (!seen.has(evt.txHash + '-' + evt.from + '-' + evt.to)) {
-                seen.add(evt.txHash + '-' + evt.from + '-' + evt.to);
-                evt.type = classifyEvent(evt);
-                newEvents.push(evt);
-              }
-            }
-            updateScanStatus(wallet.label + ': ' + data.result.length + ' transfers found');
-          } else {
-            updateScanStatus(wallet.label + ': ' + (data.message || 'no results') + ' | ' + JSON.stringify(data.result || data).substring(0, 120));
-          }
-        } catch (e) { errors++; updateScanStatus(wallet.label + ' error: ' + e.message); }
+          try {
+            var logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, paddedW] });
+            if (logsTo && logsTo.length) { for (var i=0;i<logsTo.length;i++) { var p = parseTransferLog(logsTo[i]); if (!seen.has(p.logId)) { seen.add(p.logId); newEvents.push(p); } } }
+          } catch (e) { errors++; }
 
-        await sleep(3000); // Wait so status message is visible
+          await sleep(800);
+
+          try {
+            var logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, paddedW, null] });
+            if (logsFrom && logsFrom.length) { for (var j=0;j<logsFrom.length;j++) { var q = parseTransferLog(logsFrom[j]); if (!seen.has(q.logId)) { seen.add(q.logId); newEvents.push(q); } } }
+          } catch (e) { errors++; }
+        }
+
+        // After each wallet, resolve timestamps and render
+        if (newEvents.length > 0) {
+          await resolveTimestamps(newEvents);
+          for (var k=0;k<newEvents.length;k++) { if (!newEvents[k].type||newEvents[k].type==='Unclassified') newEvents[k].type = classifyEvent(newEvents[k]); }
+          state.events = [...KNOWN_EVENTS, ...newEvents];
+          state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
+          applyFilter(state.currentFilter);
+          renderMetrics();
+        }
       }
 
-      if (newEvents.length > 0) {
-        state.events = [...KNOWN_EVENTS, ...newEvents];
-        state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
-      }
+      state.events = [...KNOWN_EVENTS, ...newEvents];
+      state.events.sort(function(a,b){return (b.timestamp||0)-(a.timestamp||0)});
       applyFilter(state.currentFilter);
-      renderMetrics(); renderBurnHistory();
+      renderMetrics();
 
       var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
-      updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' errors');
-    } catch (e) { updateScanStatus('Scan failed: ' + e.message); }
+      updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' err');
+    } catch (e) { updateScanStatus('Scan error: ' + e.message); }
   }
 
   async function resolveTimestamps(events) {
