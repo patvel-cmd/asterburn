@@ -198,9 +198,9 @@ tbody tr:hover{background:var(--bg-card-hover)}
     DECIMALS: 18,
     TRANSFER_TOPIC: '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
     RPC_ENDPOINTS: [
+      'https://bsc.drpc.org',
       'https://rpc.ankr.com/bsc/701511136454e79c4a5d4bbda35563a72d6243e728ece2cbdbe462ae19e4a703',
-      'https://bsc-dataseed.binance.org/',
-      'https://bsc-dataseed1.defibit.io/',
+      'https://bsc.meowrpc.com',
     ],
     COINGECKO_ID: 'aster-2',
     COINGECKO_URL: 'https://api.coingecko.com/api/v3',
@@ -438,7 +438,7 @@ tbody tr:hover{background:var(--bg-card-hover)}
       } catch(e) { updateScanStatus('Warmup failed: ' + e.message); }
       await sleep(1000);
 
-      var fromBlock = 81280000; // S6 buybacks known from this block
+      var fromBlock = latestBlock - 201600; // 7 days
       var CHUNK = 2000;
       var seen = new Set(state.events.map(function(e){return e.txHash}));
       var newEvents = [];
@@ -462,14 +462,14 @@ tbody tr:hover{background:var(--bg-card-hover)}
           chunksDone++;
           var pct = Math.min(Math.round((chunksDone / totalChunks) * 100), 100);
           updateScanStatus('Scanning ' + label + '... ' + pct + '% | ' + newEvents.length + ' found | ' + errors + ' err');
-          await sleep(600);
+          await sleep(1000);
 
           try {
             var logsTo = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, null, paddedW] });
             if (logsTo && logsTo.length) { for (var i=0;i<logsTo.length;i++) { var p = parseTransferLog(logsTo[i]); if (!seen.has(p.logId)) { seen.add(p.logId); newEvents.push(p); } } }
           } catch (e) { errors++; }
 
-          await sleep(600);
+          await sleep(1000);
 
           try {
             var logsFrom = await rpcGetLogs({ fromBlock: '0x'+start.toString(16), toBlock: '0x'+end.toString(16), address: CONFIG.ASTER_CONTRACT, topics: [CONFIG.TRANSFER_TOPIC, paddedW, null] });
