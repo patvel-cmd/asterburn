@@ -502,7 +502,11 @@ tbody tr:hover{background:var(--bg-card-hover)}
       renderMetrics();
 
       var bb = newEvents.filter(function(e){return e.type==='Buyback'}).length;
-      updateScanStatus('Done: ' + newEvents.length + ' events | ' + bb + ' buybacks | ' + errors + ' err');
+      if (bb > 0) {
+        updateScanStatus('Live: ' + bb + ' buybacks found (' + fmt(newEvents.reduce(function(s,e){return s+e.amount},0),0) + ' ASTER)');
+      } else {
+        updateScanStatus('Scan complete — 0 buybacks in last 7 days | ' + errors + ' RPC errors');
+      }
     } catch (e) { updateScanStatus('Scan error: ' + e.message); }
   }
 
