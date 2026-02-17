@@ -257,10 +257,18 @@ tbody tr:hover{background:var(--bg-card-hover)}
   }
 
   async function rpcGetLogs(params) {
-    const resp = await fetch(ANKR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] }) });
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.message);
-    return data.result || [];
+    for (let i = 0; i < CONFIG.RPC_ENDPOINTS.length; i++) {
+      const idx = (state.rpcIndex + i) % CONFIG.RPC_ENDPOINTS.length;
+      const url = CONFIG.RPC_ENDPOINTS[idx];
+      try {
+        const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] }) });
+        const data = await resp.json();
+        if (data.error) continue;
+        state.rpcIndex = idx;
+        return data.result || [];
+      } catch (e) { continue; }
+    }
+    throw new Error('All RPC endpoints failed for getLogs');
   }
 
   async function fetchPrice() {
